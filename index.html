@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام تسجيل الحضور الذكي</title>
+    <!-- مكتبة توليد الـ QR Code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; background-color: #f4f4f9; padding: 20px; direction: rtl; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
+        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        .admin-btn { background: #28a745; margin-top: 15px; }
+        .qr-btn { background: #6f42c1; margin-top: 10px; }
+        .success { color: green; font-weight: bold; margin-top: 10px; text-align: center; }
+        .warning { color: #d39e00; font-weight: bold; margin-top: 10px; text-align: center; }
+        .error { color: red; font-weight: bold; margin-top: 10px; text-align: center; }
+        .hidden { display: none; }
+        .info { color: #555; font-size: 0.9em; margin-top: 5px; text-align: center; }
+        #qrcode { display: flex; justify-content: center; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2 style="text-align: center;">تسجيل حضور المحاضرة</h2>
+    
+    <!-- رسائل التنبيه -->
+    <div id="alreadyRegisteredMsg" class="error hidden"></div>
+
+    <!-- نموذج تسجيل الطالب -->
+    <form id="attendanceForm">
+        <input type="text" id="fullName" placeholder="الاسم بالكامل" required>
+        <input type="text" id="studentId" placeholder="كود الطالب / الرقم الجامعي" required>
+        <button type="submit" id="submitBtn" disabled>⚠️ يلزم السماح بالموقع للتسجيل</button>
+        <div id="locationStatus" class="info">📍 جاري طلب الإذن للحصول على الموقع الجغرافي...</div>
+    </form>
+    
+    <div id="msg"></div>
+
+    <!-- لوحة التحكم الخاصة بالمحاضر -->
+    <hr style="margin-top: 30px;">
+    <h3 style="text-align: center; color: #333;">لوحة المحاضر</h3>
+    <button class="qr-btn" type="button" onclick="generateDynamicQR()">📌 تحديد الموقع الحالي وتوليد الـ QR</button>
+    <div id="qrcode"></div>
+    <button class="admin-btn" type="button" onclick="exportToCSV()">💾 تصدير كشف الحضور (Excel)</button>
+</div>
+
+<script>
+    // =========================================================================
+    // 🔴 إعدادات التحكم
+    // =========================================================================
+    
+    const CURRENT_LECTURE_ID = "lecture_01"; // كود المحاضرة (تغييره يصفر السجل تلقائياً)
+    const ALLOWED_DISTANCE_METERS = 50;     // المسافة المسموحة داخل المدرج بالمتر
+
+    // =========================================================================
+
+    const SUBMITTED_KEY = 'hasSubmitted_' + CURRENT_LECTURE_ID;
+    const RECORDS_KEY = 'attendanceRecords_' + CURRENT_LECTURE_ID;
+
+    // استخراج الإحداثيات من الـ QR
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetLat = parseFloat(urlParams.get('lat'));
+    const targetLng = parseFloat(urlParams.get('lng'));
+
+    let isWithinRange = false;
+
+    window.onload = function() {
+        if (localStorage.getItem(SUBMITTED_KEY) === 'true') {
+            disableForm("⚠️ تم تسجيل استجابتك لهذه المحاضرة بالفعل!");
+            return;
+        }
+        
+        if (targetLat && targetLng) {
+            checkStudentLocation(targetLat, targetLng);
+        } else {
+            document.getElementById('locationStatus').innerText = "ℹ️ افتح الرابط من خلال مسح الـ QR الخاص بالمحاضر.";
+        }
+    };
+
+    function disableForm(msg) {
+        document.getElementById('attendanceForm').classList.add('hidden');
+        const msgDiv = document.getElementById('alreadyRegisteredMsg');
+        msgDiv.innerText = msg;
+        msgDiv.classList.remove('hidden');
+    }
+
+    function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+        const R = 6371e3;
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return R * c;
+    }
+
+    function checkStudentLocation(lat, lng) {
+        const btn = document.getElementById('submitBtn');
+        const status = document.getElementById('locationStatus');
+
+        if (!navigator.geolocation) {
+            status.innerHTML = `<span style="color:red;">❌ المتصفح لا يدعم خدمة الموقع الجغرافي.</span>`;
+            btn.disabled = true;
+            btn.innerText = "التسجيل غير متاح";
+            return;
+        }
+
+        // طلب الإذن الصريح للموقع
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const studentLat = position.coords.latitude;
+                const studentLng = position.coords.longitude;
+
+                const calculatedDistance = getDistanceInMeters(studentLat, studentLng, lat, lng);
+                isWithinRange = calculatedDistance <= ALLOWED_DISTANCE_METERS;
+
+                // تفعيل الزر فقط بعد الحصول على الموقع بنجاح
+                btn.innerText = "ارسال طلب التسجيل";
+                btn.disabled = false;
+
+                if (isWithinRange) {
+                    status.innerHTML = `<span style="color:green;">✅ تم التحقق من الموقع (داخل نطاق المدرج).</span>`;
+                } else {
+                    status.innerHTML = `<span style="color:orange;">⚠️ تم التحقق من الموقع (تنبيه: أنت خارج نطاق المدرج).</span>`;
+                }
+            },
+            (error) => {
+                // في حالة الرفض أو عدم التفعيل يُمنع التسجيل تماماً
+                status.innerHTML = `<span style="color:red;">🔒 يجب السماح بتحديد الموقع (GPS) لتفعيل زر التسجيل!</span>`;
+                btn.disabled = true;
+                btn.innerText = "⚠️ يلزم السماح بالموقع للتسجيل";
+            },
+            { enableHighAccuracy: true }
+        );
+    }
+
+    // توليد الـ QR Code
+    function generateDynamicQR() {
+        const password = prompt("أدخل كلمة السر الخاصة بالمحاضر:");
+        if (password !== "1234") {
+            alert("كلمة السر غير صحيحة!");
+            return;
+        }
+
+        if (!navigator.geolocation) {
+            alert("خدمة تحديد الموقع غير مفعلة على جهازك!");
+            return;
+        }
+
+        alert("جاري تحديد موقع المدرج وتوليد الـ QR...");
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                
+                const baseUrl = window.location.href.split('?')[0];
+                const qrUrl = `${baseUrl}?lat=${lat}&lng=${lng}`;
+
+                const qrContainer = document.getElementById('qrcode');
+                qrContainer.innerHTML = "";
+                
+                new QRCode(qrContainer, {
+                    text: qrUrl,
+                    width: 200,
+                    height: 200
+                });
+
+                alert("تم توليد الـ QR بنجاح لموقع المدرج الحالي!");
+            },
+            (error) => {
+                alert("تعذر تحديد موقعك الحالي، تأكد من إعطاء إذن الموقع للمتصفح!");
+            },
+            { enableHighAccuracy: true }
+        );
+    }
+
+    // حفظ التسجيل
+    document.getElementById('attendanceForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const name = document.getElementById('fullName').value.trim();
+        const id = document.getElementById('studentId').value.trim();
+        const time = new Date().toLocaleTimeString('ar-EG');
+        const msgDiv = document.getElementById('msg');
+        
+        let records = JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
+
+        const duplicateId = records.some(r => r.id === id);
+        if (duplicateId) {
+            msgDiv.className = "error";
+            msgDiv.innerText = "عذراً! هذا الرقم الجامعي مسجل بالفعل.";
+            return;
+        }
+
+        // حفظ الطالب مع تحديد هل هو مقبول أم مخاف
+        records.push({ 
+            name, 
+            id, 
+            time, 
+            valid: isWithinRange
+        });
+
+        localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+        localStorage.setItem(SUBMITTED_KEY, 'true');
+        
+        if (isWithinRange) {
+            msgDiv.className = "success";
+            msgDiv.innerText = "تم تسجيل حضورك بنجاح!";
+        } else {
+            msgDiv.className = "warning";
+            msgDiv.innerText = "تم إرسال طلبك بنجاح!";
+        }
+        
+        setTimeout(() => {
+            disableForm("⚠️ تم تسجيل استجابتك لهذه المحاضرة بالفعل!");
+        }, 1500);
+    });
+
+    // تصدير ملف Excel مفصل بالاسم والكود ووقت التسجيل فقط
+    function exportToCSV() {
+        const password = prompt("أدخل كلمة السر لتصدير الكشف:");
+        if (password !== "1234") {
+            alert("كلمة السر غير صحيحة!");
+            return;
+        }
+
+        let records = JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
+        if (records.length === 0) {
+            alert("لا توجد بيانات مسجلة لهذه المحاضرة بعد!");
+            return;
+        }
+
+        const validRecords = records.filter(r => r.valid);
+        const invalidRecords = records.filter(r => !r.valid);
+
+        let csvContent = "\uFEFF=== كشف الحضور المقبولين (داخل المدرج) ===\n";
+        csvContent += "الاسم,كود الطالب,وقت التسجيل\n";
+        
+        validRecords.forEach(r => {
+            csvContent += `"${r.name.replace(/,/g, ' ')}","\t${r.id.replace(/,/g, ' ')}","${r.time}"\n`;
+        });
+
+        csvContent += "\n\n=== كشف المسجلين من خارج المدرج ===\n";
+        csvContent += "الاسم,كود الطالب,وقت التسجيل\n";
+
+        invalidRecords.forEach(r => {
+            csvContent += `"${r.name.replace(/,/g, ' ')}","\t${r.id.replace(/,/g, ' ')}","${r.time}"\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `حضور_${CURRENT_LECTURE_ID}.csv`;
+        a.click();
+    }
+</script>
+</body>
+</html>
