@@ -13,8 +13,11 @@
         button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .btn-warning-state { background: #ff9800 !important; color: #fff !important; cursor: pointer; }
         .btn-success-state { background: #28a745 !important; color: #fff !important; cursor: pointer; }
-        .admin-btn { background: #17a2b8; margin-top: 15px; }
+        .admin-btn { background: #17a2b8; margin-top: 10px; }
+        .danger-btn { background: #dc3545; margin-top: 10px; }
         .qr-btn { background: #6f42c1; margin-top: 10px; }
+        .admin-link { text-align: center; margin-top: 25px; font-size: 0.85em; }
+        .admin-link a { color: #888; text-decoration: none; cursor: pointer; }
         .success { color: green; font-weight: bold; margin-top: 10px; text-align: center; }
         .warning { color: #d39e00; font-weight: bold; margin-top: 10px; text-align: center; }
         .error { color: red; font-weight: bold; margin-top: 10px; text-align: center; }
@@ -28,41 +31,50 @@
 <div class="card">
     <h2 style="text-align: center;">تسجيل حضور المحاضرة</h2>
     
-    <!-- رسائل التنبيه -->
+    <!-- رسالة إتمام التسجيل -->
     <div id="alreadyRegisteredMsg" class="error hidden"></div>
 
-    <!-- نموذج تسجيل الطالب -->
+    <!-- نموذج تسجيل الطالب (يظهر للجميع) -->
     <form id="attendanceForm">
         <input type="text" id="fullName" placeholder="الاسم بالكامل" required>
         <input type="text" id="studentId" placeholder="كود الطالب / الرقم الجامعي" required>
         <button type="button" id="submitBtn" class="btn-warning-state" onclick="handleButtonClick()">⚠️ اضغط هنا للسماح بالموقع والتسجيل</button>
-        <div id="locationStatus" class="info">📍 يرجى اضغط على الزر بالأعلى وإعطاء إذن الموقع الجغرافي</div>
+        <div id="locationStatus" class="info">📍 يرجى الضغط على الزر بالأعلى وإعطاء إذن الموقع الجغرافي</div>
     </form>
     
     <div id="msg"></div>
 
-    <!-- لوحة التحكم الخاصة بالمحاضر -->
-    <hr style="margin-top: 30px;">
-    <h3 style="text-align: center; color: #333;">لوحة المحاضر</h3>
-    <button class="qr-btn" type="button" onclick="generateDynamicQR()">📌 تحديد الموقع الحالي وتوليد الـ QR</button>
-    <div id="qrcode"></div>
-    <button class="admin-btn" type="button" onclick="exportToCSV()">💾 تصدير كشف الحضور (Excel)</button>
+    <!-- لوحة التحكم الخاصة بالمحاضر (مخفية تماماً عن الطلاب) -->
+    <div id="adminPanel" class="hidden">
+        <hr style="margin-top: 25px;">
+        <h3 style="text-align: center; color: #333;">لوحة المحاضر / الأدمن</h3>
+        <button class="qr-btn" type="button" onclick="generateDynamicQR()">📌 تحديد الموقع الحالي وتوليد الـ QR</button>
+        <div id="qrcode"></div>
+        <button class="admin-btn" type="button" onclick="exportToCSV()">💾 تصدير كشف الحضور (Excel)</button>
+        <button class="danger-btn" type="button" onclick="resetAttendanceData()">🗑️ تصفير بيانات الحضور للمحاضرة</button>
+    </div>
+
+    <!-- رابط دخول الأدمن السري للأسفل -->
+    <div class="admin-link">
+        <a id="adminLoginBtn" onclick="loginAdmin()">⚙️ دخول المحاضر</a>
+    </div>
 </div>
 
 <script>
     // =========================================================================
-    // 🔴 إعدادات التحكم
+    // 🔴 إعدادات النظام
     // =========================================================================
     
-    const CURRENT_LECTURE_ID = "lecture_01"; // كود المحاضرة (تغييره يصفر السجل تلقائياً)
-    const ALLOWED_DISTANCE_METERS = 50;     // المسافة المسموحة داخل المدرج بالمتر
+    const GOOGLE_SCRIPT_URL = "ضع_رابط_GOOGLE_SCRIPT_هنا"; // سيتم ربطه لاحقاً
+    const ADMIN_PASSWORD = "1234";                         // كلمة سر المحاضر
+    const ALLOWED_DISTANCE_METERS = 50;                     // المسافة المسموحة داخل المدرج (متر)
+    let CURRENT_LECTURE_ID = "lecture_01";                   // كود المحاضرة الحالي
 
     // =========================================================================
 
     const SUBMITTED_KEY = 'hasSubmitted_' + CURRENT_LECTURE_ID;
     const RECORDS_KEY = 'attendanceRecords_' + CURRENT_LECTURE_ID;
 
-    // استخراج الإحداثيات من الـ QR
     const urlParams = new URLSearchParams(window.location.search);
     const targetLat = parseFloat(urlParams.get('lat'));
     const targetLng = parseFloat(urlParams.get('lng'));
@@ -77,12 +89,23 @@
         }
         
         if (targetLat && targetLng) {
-            // محاولة أولية جلب الموقع
             requestLocationPermission();
         } else {
             document.getElementById('locationStatus').innerText = "ℹ️ افتح الرابط من خلال مسح الـ QR الخاص بالمحاضر.";
         }
     };
+
+    // تسجيل دخول الأدمن لعرض اللوحة والميزات المخفية
+    function loginAdmin() {
+        const pass = prompt("أدخل كلمة سر المحاضر:");
+        if (pass === ADMIN_PASSWORD) {
+            document.getElementById('adminPanel').classList.remove('hidden');
+            document.getElementById('adminLoginBtn').style.display = 'none';
+            alert("تم تسجيل الدخول كأدمن بنجاح!");
+        } else if (pass !== null) {
+            alert("كلمة السر غير صحيحة!");
+        }
+    }
 
     function disableForm(msg) {
         document.getElementById('attendanceForm').classList.add('hidden');
@@ -130,14 +153,14 @@
                 if (isWithinRange) {
                     status.innerHTML = `<span style="color:green;">✅ تم التحقق من الموقع (داخل نطاق المدرج).</span>`;
                 } else {
-                    status.innerHTML = `<span style="color:orange;">⚠️ تم التحقق من الموقع (تنبيه: أنت خارج نطاق المدرج).</span>`;
+                    status.innerHTML = `<span style="color:red;">❌ أنت خارج نطاق المدرج! لن تتمكن من التسجيل.</span>`;
                 }
             },
             (error) => {
                 locationGranted = false;
                 btn.className = "btn-warning-state";
-                btn.innerText = "⚠️ اضغط هنا للسماح بالموقع والتسجيل";
-                status.innerHTML = `<span style="color:red;">🔒 لم يتم إعطاء إذن الموقع! اضغط على الزر بالأعلى وسامح للمتصفح بالوصول لموقعك، أو افحص إعدادات المتصفح.</span>`;
+                btn.innerText = "⚠️️ اضغط هنا للسماح بالموقع والتسجيل";
+                status.innerHTML = `<span style="color:red;">🔒 لم يتم إعطاء إذن الموقع! اضغط على الزر بالأعلى وسامح للمتصفح بالوصول لموقعك.</span>`;
             },
             { enableHighAccuracy: true, timeout: 10000 }
         );
@@ -148,12 +171,15 @@
         const idInput = document.getElementById('studentId');
 
         if (!locationGranted) {
-            // محاولة طلب الإذن مجدداً عند الضغط على الزر
             requestLocationPermission();
             return;
         }
 
-        // إرسال البيانات إذا كان الموقع مفعلاً
+        if (!isWithinRange) {
+            alert("عذراً! أنت خارج نطاق المدرج المسموح ولا يمكنك التسجيل.");
+            return;
+        }
+
         if (!nameInput.value.trim() || !idInput.value.trim()) {
             alert("يرجى إدخال الاسم وكود الطالب أولاً!");
             return;
@@ -175,23 +201,13 @@
             return;
         }
 
-        records.push({ 
-            name, 
-            id, 
-            time, 
-            valid: isWithinRange
-        });
+        records.push({ name, id, time, valid: isWithinRange });
 
         localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
         localStorage.setItem(SUBMITTED_KEY, 'true');
         
-        if (isWithinRange) {
-            msgDiv.className = "success";
-            msgDiv.innerText = "تم تسجيل حضورك بنجاح!";
-        } else {
-            msgDiv.className = "warning";
-            msgDiv.innerText = "تم إرسال طلبك بنجاح!";
-        }
+        msgDiv.className = "success";
+        msgDiv.innerText = "تم تسجيل حضورك بنجاح!";
         
         setTimeout(() => {
             disableForm("⚠️ تم تسجيل استجابتك لهذه المحاضرة بالفعل!");
@@ -200,12 +216,6 @@
 
     // توليد الـ QR Code
     function generateDynamicQR() {
-        const password = prompt("أدخل كلمة السر الخاصة بالمحاضر:");
-        if (password !== "1234") {
-            alert("كلمة السر غير صحيحة!");
-            return;
-        }
-
         if (!navigator.geolocation) {
             alert("خدمة تحديد الموقع غير مفعلة على جهازك!");
             return;
@@ -239,34 +249,16 @@
         );
     }
 
-    // تصدير ملف Excel
+    // تصدير ملف Excel محلي
     function exportToCSV() {
-        const password = prompt("أدخل كلمة السر لتصدير الكشف:");
-        if (password !== "1234") {
-            alert("كلمة السر غير صحيحة!");
-            return;
-        }
-
         let records = JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
         if (records.length === 0) {
             alert("لا توجد بيانات مسجلة لهذه المحاضرة بعد!");
             return;
         }
 
-        const validRecords = records.filter(r => r.valid);
-        const invalidRecords = records.filter(r => !r.valid);
-
-        let csvContent = "\uFEFF=== كشف الحضور المقبولين (داخل المدرج) ===\n";
-        csvContent += "الاسم,كود الطالب,وقت التسجيل\n";
-        
-        validRecords.forEach(r => {
-            csvContent += `"${r.name.replace(/,/g, ' ')}","\t${r.id.replace(/,/g, ' ')}","${r.time}"\n`;
-        });
-
-        csvContent += "\n\n=== كشف المسجلين من خارج المدرج ===\n";
-        csvContent += "الاسم,كود الطالب,وقت التسجيل\n";
-
-        invalidRecords.forEach(r => {
+        let csvContent = "\uFEFF=== كشف الحضور (داخل المدرج) ===\nالاسم,كود الطالب,وقت التسجيل\n";
+        records.forEach(r => {
             csvContent += `"${r.name.replace(/,/g, ' ')}","\t${r.id.replace(/,/g, ' ')}","${r.time}"\n`;
         });
 
@@ -275,6 +267,16 @@
         a.href = URL.createObjectURL(blob);
         a.download = `حضور_${CURRENT_LECTURE_ID}.csv`;
         a.click();
+    }
+
+    // تصفير بيانات المحاضرة
+    function resetAttendanceData() {
+        if (confirm("هل أنت تأكد من رغبتك في مسح كافة تسجيلات المحاضرة الحالية؟")) {
+            localStorage.removeItem(RECORDS_KEY);
+            localStorage.removeItem(SUBMITTED_KEY);
+            alert("تم تصفير البيانات بنجاح! يمكنك الآن بدء تسجيل محاضرة جديدة.");
+            location.reload();
+        }
     }
 </script>
 </body>
