@@ -11,8 +11,9 @@
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
         input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
         button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        button:disabled { background: #cccccc; cursor: not-allowed; }
-        .admin-btn { background: #28a745; margin-top: 15px; }
+        .btn-warning-state { background: #ff9800 !important; color: #fff !important; cursor: pointer; }
+        .btn-success-state { background: #28a745 !important; color: #fff !important; cursor: pointer; }
+        .admin-btn { background: #17a2b8; margin-top: 15px; }
         .qr-btn { background: #6f42c1; margin-top: 10px; }
         .success { color: green; font-weight: bold; margin-top: 10px; text-align: center; }
         .warning { color: #d39e00; font-weight: bold; margin-top: 10px; text-align: center; }
@@ -34,8 +35,8 @@
     <form id="attendanceForm">
         <input type="text" id="fullName" placeholder="الاسم بالكامل" required>
         <input type="text" id="studentId" placeholder="كود الطالب / الرقم الجامعي" required>
-        <button type="submit" id="submitBtn" disabled>⚠️ يلزم السماح بالموقع للتسجيل</button>
-        <div id="locationStatus" class="info">📍 جاري طلب الإذن للحصول على الموقع الجغرافي...</div>
+        <button type="button" id="submitBtn" class="btn-warning-state" onclick="handleButtonClick()">⚠️ اضغط هنا للسماح بالموقع والتسجيل</button>
+        <div id="locationStatus" class="info">📍 يرجى اضغط على الزر بالأعلى وإعطاء إذن الموقع الجغرافي</div>
     </form>
     
     <div id="msg"></div>
@@ -67,6 +68,7 @@
     const targetLng = parseFloat(urlParams.get('lng'));
 
     let isWithinRange = false;
+    let locationGranted = false;
 
     window.onload = function() {
         if (localStorage.getItem(SUBMITTED_KEY) === 'true') {
@@ -75,7 +77,8 @@
         }
         
         if (targetLat && targetLng) {
-            checkStudentLocation(targetLat, targetLng);
+            // محاولة أولية جلب الموقع
+            requestLocationPermission();
         } else {
             document.getElementById('locationStatus').innerText = "ℹ️ افتح الرابط من خلال مسح الـ QR الخاص بالمحاضر.";
         }
@@ -103,29 +106,26 @@
         return R * c;
     }
 
-    function checkStudentLocation(lat, lng) {
+    function requestLocationPermission() {
         const btn = document.getElementById('submitBtn');
         const status = document.getElementById('locationStatus');
 
         if (!navigator.geolocation) {
             status.innerHTML = `<span style="color:red;">❌ المتصفح لا يدعم خدمة الموقع الجغرافي.</span>`;
-            btn.disabled = true;
-            btn.innerText = "التسجيل غير متاح";
             return;
         }
 
-        // طلب الإذن الصريح للموقع
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const studentLat = position.coords.latitude;
                 const studentLng = position.coords.longitude;
 
-                const calculatedDistance = getDistanceInMeters(studentLat, studentLng, lat, lng);
+                const calculatedDistance = getDistanceInMeters(studentLat, studentLng, targetLat, targetLng);
                 isWithinRange = calculatedDistance <= ALLOWED_DISTANCE_METERS;
+                locationGranted = true;
 
-                // تفعيل الزر فقط بعد الحصول على الموقع بنجاح
+                btn.className = "btn-success-state";
                 btn.innerText = "ارسال طلب التسجيل";
-                btn.disabled = false;
 
                 if (isWithinRange) {
                     status.innerHTML = `<span style="color:green;">✅ تم التحقق من الموقع (داخل نطاق المدرج).</span>`;
@@ -134,13 +134,68 @@
                 }
             },
             (error) => {
-                // في حالة الرفض أو عدم التفعيل يُمنع التسجيل تماماً
-                status.innerHTML = `<span style="color:red;">🔒 يجب السماح بتحديد الموقع (GPS) لتفعيل زر التسجيل!</span>`;
-                btn.disabled = true;
-                btn.innerText = "⚠️ يلزم السماح بالموقع للتسجيل";
+                locationGranted = false;
+                btn.className = "btn-warning-state";
+                btn.innerText = "⚠️ اضغط هنا للسماح بالموقع والتسجيل";
+                status.innerHTML = `<span style="color:red;">🔒 لم يتم إعطاء إذن الموقع! اضغط على الزر بالأعلى وسامح للمتصفح بالوصول لموقعك، أو افحص إعدادات المتصفح.</span>`;
             },
-            { enableHighAccuracy: true }
+            { enableHighAccuracy: true, timeout: 10000 }
         );
+    }
+
+    function handleButtonClick() {
+        const nameInput = document.getElementById('fullName');
+        const idInput = document.getElementById('studentId');
+
+        if (!locationGranted) {
+            // محاولة طلب الإذن مجدداً عند الضغط على الزر
+            requestLocationPermission();
+            return;
+        }
+
+        // إرسال البيانات إذا كان الموقع مفعلاً
+        if (!nameInput.value.trim() || !idInput.value.trim()) {
+            alert("يرجى إدخال الاسم وكود الطالب أولاً!");
+            return;
+        }
+
+        saveAttendance(nameInput.value.trim(), idInput.value.trim());
+    }
+
+    function saveAttendance(name, id) {
+        const time = new Date().toLocaleTimeString('ar-EG');
+        const msgDiv = document.getElementById('msg');
+        
+        let records = JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
+
+        const duplicateId = records.some(r => r.id === id);
+        if (duplicateId) {
+            msgDiv.className = "error";
+            msgDiv.innerText = "عذراً! هذا الرقم الجامعي مسجل بالفعل.";
+            return;
+        }
+
+        records.push({ 
+            name, 
+            id, 
+            time, 
+            valid: isWithinRange
+        });
+
+        localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+        localStorage.setItem(SUBMITTED_KEY, 'true');
+        
+        if (isWithinRange) {
+            msgDiv.className = "success";
+            msgDiv.innerText = "تم تسجيل حضورك بنجاح!";
+        } else {
+            msgDiv.className = "warning";
+            msgDiv.innerText = "تم إرسال طلبك بنجاح!";
+        }
+        
+        setTimeout(() => {
+            disableForm("⚠️ تم تسجيل استجابتك لهذه المحاضرة بالفعل!");
+        }, 1500);
     }
 
     // توليد الـ QR Code
@@ -184,49 +239,7 @@
         );
     }
 
-    // حفظ التسجيل
-    document.getElementById('attendanceForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const name = document.getElementById('fullName').value.trim();
-        const id = document.getElementById('studentId').value.trim();
-        const time = new Date().toLocaleTimeString('ar-EG');
-        const msgDiv = document.getElementById('msg');
-        
-        let records = JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
-
-        const duplicateId = records.some(r => r.id === id);
-        if (duplicateId) {
-            msgDiv.className = "error";
-            msgDiv.innerText = "عذراً! هذا الرقم الجامعي مسجل بالفعل.";
-            return;
-        }
-
-        // حفظ الطالب مع تحديد هل هو مقبول أم مخاف
-        records.push({ 
-            name, 
-            id, 
-            time, 
-            valid: isWithinRange
-        });
-
-        localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-        localStorage.setItem(SUBMITTED_KEY, 'true');
-        
-        if (isWithinRange) {
-            msgDiv.className = "success";
-            msgDiv.innerText = "تم تسجيل حضورك بنجاح!";
-        } else {
-            msgDiv.className = "warning";
-            msgDiv.innerText = "تم إرسال طلبك بنجاح!";
-        }
-        
-        setTimeout(() => {
-            disableForm("⚠️ تم تسجيل استجابتك لهذه المحاضرة بالفعل!");
-        }, 1500);
-    });
-
-    // تصدير ملف Excel مفصل بالاسم والكود ووقت التسجيل فقط
+    // تصدير ملف Excel
     function exportToCSV() {
         const password = prompt("أدخل كلمة السر لتصدير الكشف:");
         if (password !== "1234") {
