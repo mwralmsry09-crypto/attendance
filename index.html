@@ -3,281 +3,269 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظام تسجيل الحضور الذكي</title>
-    <!-- مكتبة توليد الـ QR Code -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <title>حَاضِر الذكي - نظام تسجيل الحضور والغياب الذكي</title>
+    <!-- استدعاء مكتبة توليد الـ QR كود من رابط مباشر CDN لضمان عملها على السيرفر -->
+    <script src="https://cloudflare.com"></script>
     <style>
-        body { font-family: system-ui, sans-serif; background-color: #f4f4f9; padding: 20px; direction: rtl; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
-        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .btn-warning-state { background: #ff9800 !important; color: #fff !important; cursor: pointer; }
-        .btn-success-state { background: #28a745 !important; color: #fff !important; cursor: pointer; }
-        .admin-btn { background: #17a2b8; margin-top: 10px; }
-        .danger-btn { background: #dc3545; margin-top: 10px; }
-        .qr-btn { background: #6f42c1; margin-top: 10px; }
-        .admin-link { text-align: center; margin-top: 25px; font-size: 0.85em; }
-        .admin-link a { color: #888; text-decoration: none; cursor: pointer; }
-        .success { color: green; font-weight: bold; margin-top: 10px; text-align: center; }
-        .warning { color: #d39e00; font-weight: bold; margin-top: 10px; text-align: center; }
-        .error { color: red; font-weight: bold; margin-top: 10px; text-align: center; }
+        :root {
+            --primary: #2563eb;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --dark: #1e293b;
+            --light: #f8fafc;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light);
+            color: var(--dark);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 { text-align: center; color: var(--primary); }
+        .section {
+            border: 1px solid #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            background: #fff;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #1d4ed8; }
+        .btn-success { background-color: var(--success); }
+        .btn-success:hover { background-color: #15803d; }
+        .btn-danger { background-color: var(--danger); }
+        .btn-danger:hover { background-color: #b91c1c; }
+        #qr-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        #qrcode { margin: 15px 0; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 10px;
+            text-align: center;
+        }
+        th { background-color: #f1f5f9; }
+        .badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+        }
+        .badge-active { background-color: var(--success); }
         .hidden { display: none; }
-        .info { color: #555; font-size: 0.9em; margin-top: 5px; text-align: center; }
-        #qrcode { display: flex; justify-content: center; margin-top: 15px; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2 style="text-align: center;">تسجيل حضور المحاضرة</h2>
-    
-    <!-- رسالة إتمام التسجيل -->
-    <div id="alreadyRegisteredMsg" class="error hidden"></div>
+<div class="container">
+    <h1>🎯 نظام حَاضِر الذكي</h1>
+    <p style="text-align:center; color:#64748b;">إدارة وتسجيل الحضور بالتحقق الجغرافي الذكي</p>
 
-    <!-- نموذج تسجيل الطالب (يظهر للجميع) -->
-    <form id="attendanceForm">
-        <input type="text" id="fullName" placeholder="الاسم بالكامل" required>
-        <input type="text" id="studentId" placeholder="كود الطالب / الرقم الجامعي" required>
-        <button type="button" id="submitBtn" class="btn-warning-state" onclick="handleButtonClick()">⚠️ اضغط هنا للسماح بالموقع والتسجيل</button>
-        <div id="locationStatus" class="info">📍 يرجى الضغط على الزر بالأعلى وإعطاء إذن الموقع الجغرافي</div>
-    </form>
-    
-    <div id="msg"></div>
+    <!-- واجهة المحاضر / الأدمن -->
+    <div id="admin-panel" class="section">
+        <h2>🔒 لوحة تحكم المحاضر</h2>
+        
+        <div class="form-group">
+            <label>اسم المحاضرة / المادة *</label>
+            <input type="text" id="lecture-name" placeholder="مثال: هندسة البرمجيات">
+        </div>
+        
+        <div class="form-group">
+            <label>اسم/رقم القاعة أو المدرج</label>
+            <input type="text" id="room-name" placeholder="مثال: مدرج أ">
+        </div>
 
-    <!-- لوحة التحكم الخاصة بالمحاضر (مخفية تماماً عن الطلاب) -->
-    <div id="adminPanel" class="hidden">
-        <hr style="margin-top: 25px;">
-        <h3 style="text-align: center; color: #333;">لوحة المحاضر / الأدمن</h3>
-        <button class="qr-btn" type="button" onclick="generateDynamicQR()">📌 تحديد الموقع الحالي وتوليد الـ QR</button>
-        <div id="qrcode"></div>
-        <button class="admin-btn" type="button" onclick="exportToCSV()">💾 تصدير كشف الحضور (Excel)</button>
-        <button class="danger-btn" type="button" onclick="resetAttendanceData()">🗑️ تصفير بيانات الحضور للمحاضرة</button>
+        <div class="form-group">
+            <label>النطاق الجغرافي المسموح به (GPS Radius)</label>
+            <select id="gps-radius">
+                <option value="10">10 أمتار (قاعة صغيرة)</option>
+                <option value="30" selected>30 متراً (مدرج متوسط)</option>
+                <option value="50">50 متراً (مدرج كبير)</option>
+                <option value="100">100 متر (مبنى الكلية)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>موقع القاعة الحالي (إحداثيات اللابتوب)</label>
+            <button type="button" onclick="getLocation()" class="btn-success" style="margin-bottom:10px;">📍 التقاط إحداثيات موقعي الآن</button>
+            <p id="location-status" style="text-align:center; font-size:14px; color:#64748b;">لم يتم تحديد الموقع بعد.</p>
+        </div>
+
+        <button onclick="startSession()">🚀 بدء جلسة الحضور وتوليد الـ QR Code</button>
+
+        <!-- منطقة عرض الـ QR بعد البدء -->
+        <div id="qr-container" class="hidden">
+            <h3>اضغط لتكبير الـ QR واطلب من الطلاب مسحه</h3>
+            <div id="qrcode"></div>
+            <p id="session-info-display" style="font-weight:bold; color:var(--primary);"></p>
+            <button onclick="endSession()" class="btn-danger">🛑 إنهاء الجلسة وتصدير ملف التقرير</button>
+        </div>
     </div>
 
-    <!-- رابط دخول الأدمن السري للأسفل -->
-    <div class="admin-link">
-        <a id="adminLoginBtn" onclick="loginAdmin()">⚙️ دخول المحاضر</a>
+    <!-- واجهة الطالب (تظهر تلقائياً عند مسح الـ QR بالموبايل) -->
+    <div id="student-panel" class="section hidden">
+        <h2>📝 تسجيل حضور طالب</h2>
+        <div id="student-session-details" style="background:#f1f5f9; padding:10px; border-radius:6px; margin-bottom:15px; text-align:center;"></div>
+        
+        <div class="form-group">
+            <label>الاسم الثلاثي أو الرباعي *</label>
+            <input type="text" id="student-name" placeholder="أدخل اسمك كاملاً">
+        </div>
+
+        <div class="form-group">
+            <label>الرقم / الكود الجامعي *</label>
+            <input type="text" id="student-code" placeholder="أدخل كودك الجامعي">
+        </div>
+
+        <button onclick="submitAttendance()" class="btn-success">✅ تأكيد وتسجيل الحضور الجغرافي الفوري</button>
+        <p id="student-status" style="text-align:center; font-weight:bold; margin-top:15px;"></p>
+    </div>
+
+    <!-- سجل الحضور اللحظي للمحاضر -->
+    <div id="live-feed-section" class="section">
+        <h3>📊 سجل الحضور اللحظي (Real-Time Feed)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>اسم الطالب</th>
+                    <th>الكود الجامعي</th>
+                    <th>وقت التسجيل</th>
+                    <th>حالة النطاق</th>
+                </tr>
+            </thead>
+            <tbody id="attendance-table-body">
+                <tr id="no-students"><td colspan="4">لم يسجل أي طالب حضوره بعد في هذه الجلسة</td></tr>
+            </tbody>
+        </table>
     </div>
 </div>
 
 <script>
-    // =========================================================================
-    // 🔴 إعدادات النظام
-    // =========================================================================
-    
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby4zMXwdWftWzAgjmIYkY5azw3-TF_rckCJSs84Qn6iAi3WBLOMKDuAOH1WcvXW3TDM/exec";
-    const ADMIN_PASSWORD = "1234";                         // كلمة سر المحاضر
-    const ALLOWED_DISTANCE_METERS = 50;                     // المسافة المسموحة داخل المدرج (متر)
-    let CURRENT_LECTURE_ID = "lecture_02";                   // كود المحاضرة الحالي
+let adminLat = null;
+let adminLng = null;
+let qrcodeInstance = null;
+let attendanceList = [];
 
-    // =========================================================================
+// 1. التقاط إحداثيات موقع المحاضر
+function getLocation() {
+    const status = document.getElementById('location-status');
+    if (!navigator.geolocation) {
+        status.innerText = "متصفحك لا يدعم تحديد الموقع الجغرافي.";
+        return;
+    }
+    status.innerText = "جاري التقاط الإحداثيات...";
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            adminLat = position.coords.latitude;
+            adminLng = position.coords.longitude;
+            status.innerHTML = `✅ تم التقاط الموقع بنجاح! <br> (Lat: ${adminLat.toFixed(5)}, Lng: ${adminLng.toFixed(5)})`;
+        },
+        (error) => {
+            status.innerText = "❌ فشل التقاط الموقع. تأكد من تفعيل الـ GPS وإعطاء صلاحية للموقع.";
+        }
+    );
+}
 
-    const SUBMITTED_KEY = 'hasSubmitted_' + CURRENT_LECTURE_ID;
-    const RECORDS_KEY = 'attendanceRecords_' + CURRENT_LECTURE_ID;
+// 2. بدء الجلسة وتوليد الـ QR المطور الحامل للبيانات
+function startSession() {
+    const lecture = document.getElementById('lecture-name').value;
+    const room = document.getElementById('room-name').value;
+    const radius = document.getElementById('gps-radius').value;
 
+    if (!lecture || !adminLat || !adminLng) {
+        alert("تنبيه: يرجى كتابة اسم المادة والتقاط موقع القاعة أولاً!");
+        return;
+    }
+
+    // بناء الرابط البرمجي وتشفير البيانات جواه عشان الموبايل يقرأها فوراً دون قاعدة بيانات
+    const baseUrl = window.location.origin + window.location.pathname;
+    const sessionParams = `?action=attend&sub=${encodeURIComponent(lecture)}&rm=${encodeURIComponent(room)}&rad=${radius}&lat=${adminLat}&lng=${adminLng}`;
+    const fullAttendanceUrl = baseUrl + sessionParams;
+
+    // إظهار كونتينر الـ QR
+    document.getElementById('qr-container').classList.remove('hidden');
+    document.getElementById('session-info-display').innerText = `جلسة جارية لـ: ${lecture} (${room})`;
+
+    // توليد الـ QR كود داخل الـ Div
+    document.getElementById('qrcode').innerHTML = "";
+    qrcodeInstance = new QRCode(document.getElementById("qrcode"), {
+        text: fullAttendanceUrl,
+        width: 200,
+        height: 200
+    });
+}
+
+// 3. التحقق مما إذا كان السايت مفتوحاً من رابط الـ QR على موبايل الطالب
+window.onload = function() {
     const urlParams = new URLSearchParams(window.location.search);
-    const targetLat = parseFloat(urlParams.get('lat'));
-    const targetLng = parseFloat(urlParams.get('lng'));
+    if (urlParams.get('action') === 'attend') {
+        // إخفاء لوحة الأدمن وإظهار لوحة الطالب فوراً
+        document.getElementById('admin-panel').classList.add('hidden');
+        document.getElementById('live-feed-section').classList.add('hidden');
+        document.getElementById('student-panel').classList.remove('hidden');
 
-    let isWithinRange = false;
-    let locationGranted = false;
-
-    window.onload = function() {
-        if (localStorage.getItem(SUBMITTED_KEY) === 'true') {
-            disableForm("⚠️ تم تسجيل استجابتك لهذه المحاضرة بالفعل!");
-            return;
-        }
-        
-        if (targetLat && targetLng) {
-            requestLocationPermission();
-        } else {
-            document.getElementById('locationStatus').innerText = "ℹ️ افتح الرابط من خلال مسح الـ QR الخاص بالمحاضر.";
-        }
-    };
-
-    // تسجيل دخول الأدمن لعرض اللوحة والميزات المخفية
-    function loginAdmin() {
-        const pass = prompt("أدخل كلمة سر المحاضر:");
-        if (pass === ADMIN_PASSWORD) {
-            document.getElementById('adminPanel').classList.remove('hidden');
-            document.getElementById('adminLoginBtn').style.display = 'none';
-            alert("تم تسجيل الدخول كأدمن بنجاح!");
-        } else if (pass !== null) {
-            alert("كلمة السر غير صحيحة!");
-        }
+        // عرض تفاصيل المحاضرة للطالب
+        const sub = urlParams.get('sub');
+        const rm = urlParams.get('rm');
+        document.getElementById('student-session-details').innerText = `المادة: ${sub} | القاعة: ${rm}`;
     }
+}
 
-    function disableForm(msg) {
-        document.getElementById('attendanceForm').classList.add('hidden');
-        const msgDiv = document.getElementById('alreadyRegisteredMsg');
-        msgDiv.innerText = msg;
-        msgDiv.classList.remove('hidden');
-    }
+// 4. قياس المسافة بين الطالب والقاعة برمجياً (Haversine Formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // نصف قطر الأرض بالأمتار
+    const phi1 = lat1 * Math.PI/180;
+    const phi2 = lat2 * Math.PI/180;
+    const deltaPhi = (lat2-lat1) * Math.PI/180;
+    const deltaLambda = (lon2-lon1) * Math.PI/180;
 
-    function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-        const R = 6371e3;
-        const φ1 = lat1 * Math.PI / 180;
-        const φ2 = lat2 * Math.PI / 180;
-        const Δφ = (lat2 - lat1) * Math.PI / 180;
-        const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                  Math.cos(φ1) * Math.cos(φ2) *
-                  Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return R * c;
-    }
-
-    function requestLocationPermission() {
-        const btn = document.getElementById('submitBtn');
-        const status = document.getElementById('locationStatus');
-
-        if (!navigator.geolocation) {
-            status.innerHTML = `<span style="color:red;">❌ المتصفح لا يدعم خدمة الموقع الجغرافي.</span>`;
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const studentLat = position.coords.latitude;
-                const studentLng = position.coords.longitude;
-
-                const calculatedDistance = getDistanceInMeters(studentLat, studentLng, targetLat, targetLng);
-                isWithinRange = calculatedDistance <= ALLOWED_DISTANCE_METERS;
-                locationGranted = true;
-
-                btn.className = "btn-success-state";
-                btn.innerText = "ارسال طلب التسجيل";
-
-                if (isWithinRange) {
-                    status.innerHTML = `<span style="color:green;">✅ تم التحقق من الموقع (داخل نطاق المدرج).</span>`;
-                } else {
-                    status.innerHTML = `<span style="color:red;">❌ أنت خارج نطاق المدرج! لن تتمكن من التسجيل.</span>`;
-                }
-            },
-            (error) => {
-                locationGranted = false;
-                btn.className = "btn-warning-state";
-                btn.innerText = "⚠️️ اضغط هنا للسماح بالموقع والتسجيل";
-                status.innerHTML = `<span style="color:red;">🔒 لم يتم إعطاء إذن الموقع! اضغط على الزر بالأعلى وسامح للمتصفح بالوصول لموقعك.</span>`;
-            },
-            { enableHighAccuracy: true, timeout: 10000 }
-        );
-    }
-
-    function handleButtonClick() {
-        const nameInput = document.getElementById('fullName');
-        const idInput = document.getElementById('studentId');
-
-        if (!locationGranted) {
-            requestLocationPermission();
-            return;
-        }
-
-        if (!isWithinRange) {
-            alert("عذراً! أنت خارج نطاق المدرج المسموح ولا يمكنك التسجيل.");
-            return;
-        }
-
-        if (!nameInput.value.trim() || !idInput.value.trim()) {
-            alert("يرجى إدخال الاسم وكود الطالب أولاً!");
-            return;
-        }
-
-        saveAttendance(nameInput.value.trim(), idInput.value.trim());
-    }
-
-    function saveAttendance(name, id) {
-        const time = new Date().toLocaleTimeString('ar-EG');
-        const msgDiv = document.getElementById('msg');
-        
-        let records = JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
-
-        const duplicateId = records.some(r => r.id === id);
-        if (duplicateId) {
-            msgDiv.className = "error";
-            msgDiv.innerText = "عذراً! هذا الرقم الجامعي مسجل بالفعل.";
-            return;
-        }
-
-        records.push({ name, id, time, valid: isWithinRange });
-
-        localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-        localStorage.setItem(SUBMITTED_KEY, 'true');
-        
-        msgDiv.className = "success";
-        msgDiv.innerText = "تم تسجيل حضورك بنجاح!";
-        
-        setTimeout(() => {
-            disableForm("⚠️ تم تسجيل استجابتك لهذه المحاضرة بالفعل!");
-        }, 1500);
-    }
-
-    // توليد الـ QR Code
-    function generateDynamicQR() {
-        if (!navigator.geolocation) {
-            alert("خدمة تحديد الموقع غير مفعلة على جهازك!");
-            return;
-        }
-
-        alert("جاري تحديد موقع المدرج وتوليد الـ QR...");
-
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                
-                const baseUrl = window.location.href.split('?')[0];
-                const qrUrl = `${baseUrl}?lat=${lat}&lng=${lng}`;
-
-                const qrContainer = document.getElementById('qrcode');
-                qrContainer.innerHTML = "";
-                
-                new QRCode(qrContainer, {
-                    text: qrUrl,
-                    width: 200,
-                    height: 200
-                });
-
-                alert("تم توليد الـ QR بنجاح لموقع المدرج الحالي!");
-            },
-            (error) => {
-                alert("تعذر تحديد موقعك الحالي، تأكد من إعطاء إذن الموقع للمتصفح!");
-            },
-            { enableHighAccuracy: true }
-        );
-    }
-
-    // تصدير ملف Excel محلي
-    function exportToCSV() {
-        let records = JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
-        if (records.length === 0) {
-            alert("لا توجد بيانات مسجلة لهذه المحاضرة بعد!");
-            return;
-        }
-
-        let csvContent = "\uFEFF=== كشف الحضور (داخل المدرج) ===\nالاسم,كود الطالب,وقت التسجيل\n";
-        records.forEach(r => {
-            csvContent += `"${r.name.replace(/,/g, ' ')}","\t${r.id.replace(/,/g, ' ')}","${r.time}"\n`;
-        });
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `حضور_${CURRENT_LECTURE_ID}.csv`;
-        a.click();
-    }
-
-    // تصفير بيانات المحاضرة
-    function resetAttendanceData() {
-        if (confirm("هل أنت تأكد من رغبتك في مسح كافة تسجيلات المحاضرة الحالية؟")) {
-            localStorage.removeItem(RECORDS_KEY);
-            localStorage.removeItem(SUBMITTED_KEY);
-            alert("تم تصفير البيانات بنجاح! يمكنك الآن بدء تسجيل محاضرة جديدة.");
-            location.reload();
-        }
-    }
-</script>
-</body>
-</html>
+    const a = Math.sin(deltaPhi/2) * Math.sin(deltaPhi/2) +
+              Math.cos(phi1) * Math.cos(phi2) *
+ 
