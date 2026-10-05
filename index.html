@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام تسجيل الحضور والغياب الذكي</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#16a34a', 600: '#15803d', 700: '#15803d', 800: '#166534', 900: '#14532d' },
+                        slateCustom: { 800: '#1e293b', 900: '#0f172a' }
+                    },
+                    fontFamily: {
+                        sans: ['Tajawal', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Tajawal Font -->
+    <link href="https://googleapis.com" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cloudflare.com">
+    <!-- SheetJS for Excel Download -->
+    <script src="https://cloudflare.com"></script>
+    <!-- مكتبة توليد الـ QR -->
+    <script src="https://cloudflare.com"></script>
+    
+    <!-- استدعاء حزم سكريبت Firebase المتوافقة سحابياً بشكل صحيح -->
+    <script src="https://gstatic.com"></script>
+    <script src="https://gstatic.com"></script>
+
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f8fafc;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+
+    <!-- Navigation Header -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3 space-x-reverse">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-md font-bold text-xl">
+                    <i class="fa-solid me-0.5 fa-qrcode"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg sm:text-xl tracking-tight text-white flex items-center gap-2">
+                        حَاضِر <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">الذكي</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">نظام إدارة وتسجيل الحضور الجامعي سحابياً لحظياً</p>
+                </div>
+            </div>
+
+            <!-- Header Controls -->
+            <div class="flex items-center space-x-2 space-x-reverse">
+                <div id="sessionBadge" class="hidden items-center gap-2 bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 px-3 py-1.5 rounded-lg text-xs font-medium">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span>الجلسة النشطة: <strong id="activeLectureBadgeName" class="text-white">--</strong></span>
+                </div>
+
+                <button id="navModeBtn" onclick="toggleViewMode()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm px-3 py-2 rounded-lg border border-slate-700 flex items-center gap-2 transition">
+                    <i class="fa-solid fa-mobile-screen-button text-emerald-400"></i>
+                    <span id="navModeText">الانتقال لواجهة الطالب</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Wrapper -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+
+        <!-- VIEW 1: LECTURE SETUP FORM (لوحة تحكم الدكتور لبدء المحاضرة) -->
+        <section id="doctorSetupSection" class="space-y-6 animate-fade-in">
+            <div id="lectureSetupCard" class="glass-card rounded-2xl p-6 shadow-md border border-slate-200">
+                <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-bold">
+                            <i class="fa-solid fa-sliders"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-900">بدء جلسة حضور جديدة على سحابة Firebase</h2>
+                            <p class="text-xs text-slate-500">أدخل بيانات المحاضرة لتفعيل استقبال حضور الطلاب فوراً</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">اسم المادة / المحاضرة</label>
+                        <input type="text" id="lectureNameInput" placeholder="مثال: كيمياء صيدلية" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 outline-none text-sm focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">اسم الدكتور / المحاضر</label>
+                        <input type="text" id="doctorNameInput" placeholder="أدخل اسمك الكريم" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 outline-none text-sm focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </div>
+
+                <button onclick="startLectureSession()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-sm">
+                    <i class="fa-solid fa-play"></i>
+                    <span>تفعيل الجلسة وتوليد كود الـ QR للطلاب</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- VIEW 2: LIVE ATTENDANCE DASHBOARD (شاشة عرض المدرج واستقبل الأسماء حياً) -->
+        <section id="doctorDashboardSection" class="hidden space-y-6 animate-fade-in">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- مربع الـ QR -->
+                <div class="glass-card rounded-2xl p-6 shadow-md text-center flex flex-col items-center justify-center">
+                    <h3 class="text-lg font-bold text-slate-900 mb-2" id="liveLectureTitle">المادة: --</h3>
+                    <p class="text-xs text-slate-500 mb-4">وجه كاميرا الهاتف نحو الكود لتسجيل حضورك</p>
+                    <div id="qrcode" class="p-4 bg-white border border-slate-200 rounded-xl shadow-inner flex justify-center"></div>
+                </div>
+
+                <!-- جدول الطلاب المستلم لحظياً من الهواتف -->
+                <div class="lg:grid-cols-2 lg:col-span-2 glass-card rounded-2xl p-6 shadow-md flex flex-col justify-between">
+                    <div class="flex justify-between items-center mb-4 pb-2 border-b">
+                        <h3 class="font-bold text-slate-900"><i class="fa-solid fa-users text-emerald-500 me-2"></i>الطلاب الحاضرون أونلاين (<span id="attendanceCount">0</span>)</h3>
+                        <div class="flex gap-2">
+                            <button onclick="clearDatabase()" class="bg-red-50 hover:bg-red-100 text-red-600 text-xs px-2.5 py-2 rounded-lg transition border border-red-200">
+                                <i class="fa-solid fa-trash-can"></i> مسح الكشف الحالي
+                            </button>
+                            <button onclick="exportToExcel()" class="bg-slate-900 hover:bg-slate-800 text-white text-xs px-3 py-2 rounded-lg flex items-center gap-2 transition">
+                                <i class="fa-solid fa-file-excel text-emerald-400"></i> تصدير لملف Excel
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-y-auto max-h-64 w-full">
+                        <table class="w-full text-center text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 font-bold border-b">
+                                    <th class="p-2">الاسم رباعي</th>
+                                    <th class="p-2">الرقم الأكاديمي</th>
+                                    <th class="p-2">وقت تسجيل الحضور</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceTableBody">
+                                <!-- تتدفق بيانات الطلاب وتظهر تلقائياً هنا في نفس الثانية -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 3: STUDENT REGISTER FORM (واجهة الهاتف الخاصة بالطالب) -->
+        <section id="studentSection" class="hidden max-w-md mx-auto my-6 animate-fade-in">
+يُرجى استخدام الرمز البرمجي بحذر.
+
+
+استمارة تسجيل هويتِك في المحاضرة
+سيتم إرسال حضورك مباشرة إلى شاشة الدكتور بالدفع السحابي
+اسم الطالب رباعي:
+الرقم الأكاديمي / القومي:
+تأكيد وإرسال حضوري للشبكة
+
+
+
+جميع الحقوق محفوظة © 2026 - نظام حاضر الذكي المرتبط بسيرفر Firebase.
+// مصفوفة الاتصال والربط بسيرفر الـ Firebase المباشر الخاص بك
+const firebaseConfig = {
+apiKey: "AIzaSyCnGOgNmSkRs2MgUo1OYBW-4UOLYvTAZcA",
+authDomain: "firebaseapp.com",
+databaseURL: "firebaseio.com",
+projectId: "attendance-system-234c2",
+storageBucket: "attendance-system-234c2.firebasestorage.app",
+messagingSenderId: "98033947449",
+appId: "1:98033947449:web:0c021c09cdb5fd0bef4ee8",
+measurementId: "G-H16PNT81QL"
+};
+// تفعيل الـ SDK وربط قاعدة البيانات
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+let viewMode = 'doctor';
+let attendanceList = [];
+let fixedToken = "LEC_ATT_FIXED_SESSION_2026";
+let qrGenerator = null;
+window.onload = function() {
+const qrBox = document.getElementById("qrcode");
+qrGenerator = new QRCode(qrBox, { width: 200, height: 200 });
+listenToLiveAttendance();
+};
+// بدء الجلسة وتشغيل التدفق اللحظي للبيانات
+function startLectureSession() {
+const lectureName = document.getElementById("lectureNameInput").value.trim();
+const doctorName = document.getElementById("doctorNameInput").value.trim();
+if (!lectureName || !doctorName) {
+alert("يرجى ملء اسم المادة واسم الدكتور أولاً!");
+return;
+}
+document.getElementById("liveLectureTitle").innerText = "المادة: " + lectureName;
+document.getElementById("activeLectureBadgeName").innerText = lectureName;
+document.getElementById("sessionBadge").classList.remove("hidden");
+qrGenerator.clear();
+qrGenerator.makeCode(fixedToken);
+document.getElementById("doctorSetupSection").classList.add("hidden");
+document.getElementById("doctorDashboardSection").classList.remove("hidden");
+}
+// الاستماع لقاعدة البيانات السحابية وضخ البيانات في الجدول فوراً
+function listenToLiveAttendance() {
+database.ref('attendance_records').on('value', (snapshot) => {
+const data = snapshot.val();
+attendanceList = [];
+const tbody = document.getElementById("attendanceTableBody");
+tbody.innerHTML = "";
+if (data) {
+Object.keys(data).forEach(key => {
+const student = data[key];
+attendanceList.push(student);
+const row = `
+${student.name}
+${student.id}
+${student.time}
+`;
+tbody.innerHTML += row;
+});
+}
+document.getElementById("attendanceCount").innerText = attendanceList.length;
+});
+}
+// إرسال الحضور من جهاز الطالب ورفعه مباشرة على السيرفر
+function submitStudentAttendance() {
+const name = document.getElementById("studentName").value.trim();
+const id = document.getElementById("studentID").value.trim();
+const time = new Date().toLocaleTimeString('ar-EG');
+if (!name || !id) {
+alert("يرجى إدخال اسمك ورقمك الأكاديمي لتأكيد هويتك!");
+return;
+}
+// ضخ الأسماء أونلاين في سيرفر Firebase الخاص بك
+database.ref('attendance_records').push({
+name: name,
+id: id,
+time: time
+}).then(() => {
+alert("✓ تم إرسال حضورك بنجاح ووصل لشاشة الدكتور أونلاين!");
+document.getElementById("studentName").value = "";
+document.getElementById("studentID").value = "";
+toggleViewMode();
+}).catch((error) => {
+alert("خطأ في الاتصال بالسحابة: " + error.message);
+});
+}
+// تصفير وتنظيف الكشف السحابي
+function clearDatabase() {
+if (confirm("هل أنت متأكد من مسح جميع الأسماء الحالية من قاعدة البيانات لبدء كشف جديد؟")) {
+database.ref('attendance_records').remove().then(() => {
+alert("تم تنظيف الكشف السحابي بنجاح!");
+});
+}
+}
+// التبديل بين واجهة المحاضر والطالب للمعاينة
+function toggleViewMode() {
+const navText = document.getElementById("navModeText");
+if (viewMode === 'doctor') {
+viewMode = 'student';
+navText.innerText = "العودة لواجهة الدكتور";
+document.getElementById("doctorSetupSection").classList.add("hidden");
+document.getElementById("doctorDashboardSection").classList.add("hidden");
+document.getElementById("studentSection").classList.remove("hidden");
+} else {
+viewMode = 'doctor';
+navText.innerText = "الانتقال لواجهة الطالب";
+document.getElementById("studentSection").classList.add("hidden");
+if (document.getElementById("activeLectureBadgeName").innerText !== "--") {
+document.getElementById("doctorDashboardSection").classList.remove("hidden");
+} else {
+document.getElementById("doctorSetupSection").classList.remove("hidden");
+}
+}
+}
+// تحويل الكشف السحابي لملف إكسيل عبر مكتبة SheetJS وتنزيله
+function exportToExcel() {
+if (attendanceList.length === 0) {
+alert("لا توجد بيانات طلاب مسجلة حالياً لتصديرها.");
+return;
+}
+const dataRows = [
+["اسم الطالب رباعي", "الرقم الأكاديمي / القومي", "وقت تسجيل الحضور"]
+];
+attendanceList.forEach(student => {
+dataRows.push([student.name, student.id, student.time]);
+});
+const workbook = XLSX.utils.book_new();
+const worksheet = XLSX.utils.aoa_to_sheet(dataRows);
+XLSX.utils.book_append_sheet(workbook, worksheet, "كشف الحضور الحقيقي");
+XLSX.writeFile(workbook, "حضور_Firebase_المحاضرة.xlsx");
+}
